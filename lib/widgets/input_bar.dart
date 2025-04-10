@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:tabs_test/models/tab_item.dart';
 
 import '../theme/app_colors.dart';
-import '../managers/tab_manager.dart';
 
 class InputBar extends StatefulWidget {
   final TextEditingController controller;
+
   final FocusNode focusNode;
 
   final VoidCallback onSendPressed;
@@ -21,7 +22,7 @@ class InputBar extends StatefulWidget {
 
   final Function(int) onMove;
 
-  final TabManager tabManager;
+  final List<TabItem> tabs;
 
   const InputBar({
     super.key,
@@ -34,7 +35,7 @@ class InputBar extends StatefulWidget {
     this.selectedCount = 0,
     required this.onDelete,
     required this.onMove,
-    required this.tabManager,
+    required this.tabs,
   });
 
   @override
@@ -118,10 +119,10 @@ class _InputBarState extends State<InputBar> {
                   children: [
                     PopupMenuButton<int>(
                       itemBuilder: (context) => List.generate(
-                        widget.tabManager.tabs.length,
+                        widget.tabs.length,
                         (index) => PopupMenuItem(
                           value: index,
-                          child: Text(widget.tabManager.tabs[index].title),
+                          child: Text(widget.tabs[index].title),
                         ),
                       ),
                       onSelected: widget.onMove,

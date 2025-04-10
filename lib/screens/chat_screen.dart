@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
-import '../widgets/message_bubble.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:tabs_test/bloc/messages_bloc.dart';
+import 'package:tabs_test/bloc/tab_bloc.dart';
+import 'package:tabs_test/bloc/tabs_bloc.dart';
+import 'package:tabs_test/data/messages_repository.dart';
+import 'package:tabs_test/data/tabs_datasource_storage.dart';
+import 'package:tabs_test/data/tabs_repository.dart';
+import 'package:tabs_test/widgets/dependencies_scope.dart';
+import 'package:tabs_test/widgets/tab_item_body.dart';
 import '../widgets/input_bar.dart';
 import '../widgets/scroll_tabs.dart';
 import '../widgets/header.dart';
 import '../widgets/side_menu.dart';
 import '../models/message.dart';
-import '../services/storage_service.dart';
-import '../managers/message_manager.dart';
-import '../managers/tab_manager.dart';
-import '../controllers/custom_page_controller.dart';
 import '../theme/app_colors.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../models/tab_item.dart';
-import 'package:flutter/services.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -23,332 +25,206 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen>
     with SingleTickerProviderStateMixin {
-  late final MessageManager _messageManager;
-  late final TabManager _tabManager;
+  late final TabsBloc _tabsBloc;
+
+  final ValueNotifier<String?> _selectedTabIdNotifier = ValueNotifier(null);
+
+  /// For each tab, there is a bloc that handles the messages for that tab
+  Map<String, MessagesBloc> _messagesBlocs = {};
+
+  /// For each tab, there is a bloc that handles the tab for that tab
+  Map<String, TabBloc> _tabsBlocs = {};
+
+  void _tabsBlocListener(TabsState state) {
+    final messagesRepository = context.dependencies.messagesRepository;
+
+    switch (state) {
+      case TabsState$Successful state:
+        final tabs = state.tabs;
+        for (final tab in tabs) {
+          if (_selectedTabIdNotifier.value == null) {
+            _selectedTabIdNotifier.value = tab.id;
+          }
+
+          _messagesBlocs[tab.id] = _messagesBlocs[tab.id] ??
+              MessagesBloc(
+                repository: messagesRepository,
+                initialState: MessagesState.idle(
+                  tabId: tab.id,
+                  messages: const [],
+                ),
+              )
+            ..add(
+              MessagesEvent.fetch(),
+            );
+
+          _tabsBlocs[tab.id] = _tabsBlocs[tab.id] ??
+              TabBloc(
+                repository: TabsRepository(TabsDatasource$Storage()),
+                initialState: TabState.idle(
+                  tabItem: tab,
+                ),
+              );
+        }
+        break;
+      default:
+    }
+  }
+
   final _textController = TextEditingController();
   final _focusNode = FocusNode();
   double? _dragStartX;
+
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
     super.initState();
-    _messageManager = MessageManager(StorageService());
-    _tabManager = TabManager(
-      pageController: CustomPageController(),
-    );
 
-    _messageManager.initialize().then((_) {
-      if (mounted) {
-        setState(() {});
-      }
-    });
+    _tabsBloc = context.dependencies.tabsBloc
+      ..add(
+        TabsEvent.fetchTabs(),
+      );
+    _tabsBloc.stream.listen(_tabsBlocListener);
   }
 
   Future<void> _sendMessage() async {
     if (_textController.text.trim().isEmpty) return;
+    if (_selectedTabIdNotifier.value == null) return;
 
     final message = Message(
       text: _textController.text,
-      isMe: true,
-      timestamp: DateTime.now(),
-      tabIndex: _tabManager.selectedTabIndex,
+      createdAt: DateTime.now(),
+      tabId: _selectedTabIdNotifier.value!,
     );
 
+    final bloc = _messagesBlocs[message.tabId]!;
     _textController.clear();
-    
-    // Добавляем сообщение (через MessageManager) в начало списка
-    await _messageManager.sendMessage(message);
-    setState(() {});
 
-    // Скроллим к началу списка (для reverse: true это "вниз" на экране)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final controller = _tabManager.scrollControllers[_tabManager.selectedTabIndex];
-      if (controller?.hasClients ?? false) {
-        controller!.animateTo(
-          0, // при reverse: true, 0 = низ списка на экране
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
-  }
-
-  Widget _buildMessageList(int tabIndex) {
-    final messages = _messageManager.messagesByTabIndex[tabIndex] ?? [];
-
-    if (messages.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (_tabManager.tabs[tabIndex].emoji != null) ...[
-              Text(
-                _tabManager.tabs[tabIndex].emoji!,
-                style: TextStyle(
-                  fontSize: 48,
-                  fontFamily: GoogleFonts.inter().fontFamily,
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-            Column(
-              children: [
-                Text(
-                  _tabManager.tabs[tabIndex].title,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.getPrimaryText(context),
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.2,
-                    fontFamily: GoogleFonts.inter().fontFamily,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Напишите первую заметку',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.getSecondaryText(context),
-                    fontSize: 17,
-                    letterSpacing: 0.2,
-                    fontFamily: GoogleFonts.inter().fontFamily,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      key: PageStorageKey(tabIndex),
-      controller: _tabManager.scrollControllers[tabIndex],
-      reverse: true,
-      padding: const EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: 16,
-      ),
-      physics: const AlwaysScrollableScrollPhysics(
-        parent: BouncingScrollPhysics(),
-      ),
-      itemCount: messages.length,
-      itemBuilder: (context, index) {
-        if (index == messages.length - 1) {
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 48),
-              MessageBubble(
-                message: messages[index],
-                isSelectionMode: _messageManager.isSelectionMode,
-                isSelected: _messageManager.selectedMessages.contains(messages[index]),
-                onLongPress: () {
-                  setState(() {
-                    _messageManager.toggleSelectionMode();
-                    _messageManager.toggleMessageSelection(messages[index]);
-                  });
-                },
-                onSelect: () {
-                  setState(() {
-                    _messageManager.toggleMessageSelection(messages[index]);
-                  });
-                },
-              ),
-            ],
-          );
-        }
-
-        return MessageBubble(
-          message: messages[index],
-          isSelectionMode: _messageManager.isSelectionMode,
-          isSelected: _messageManager.selectedMessages.contains(messages[index]),
-          onLongPress: () {
-            setState(() {
-              _messageManager.toggleSelectionMode();
-              _messageManager.toggleMessageSelection(messages[index]);
-            });
-          },
-          onSelect: () {
-            setState(() {
-              _messageManager.toggleMessageSelection(messages[index]);
-            });
-          },
-        );
-      },
-    );
+    bloc.add(MessagesEvent.send(message: message));
   }
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => _focusNode.unfocus(),
-      child: Scaffold(
-        key: _scaffoldKey,
-        resizeToAvoidBottomInset: true,
-        backgroundColor: AppColors.getPrimaryBackground(context),
-        drawer: Builder(
-          builder: (context) => SideMenu(
-            tabs: _tabManager.tabs,
-            selectedIndex: _tabManager.selectedTabIndex,
-            onTabSelected: (index) {
-              setState(() {
-                _tabManager.handleTabSelection(index, fromDrawer: true);
-              });
-            },
-            onCreateTab: (title) {
-              print('🔵 ChatScreen.onCreateTab:');
-              print('  Входящий title: $title');
-
-              setState(() {
-                final parts = title.split(' ');
-                String? emoji;
-                String tabTitle;
-
-                if (parts.isNotEmpty && isEmoji(parts.first)) {
-                  emoji = parts.first;
-                  tabTitle = parts.skip(1).join(' ');
-                } else {
-                  emoji = null;
-                  tabTitle = title;
-                }
-
-                print('  Разобранные данные:');
-                print('    emoji: $emoji');
-                print('    tabTitle: $tabTitle');
-
-                if (tabTitle.isEmpty) {
-                  print('  ⚠️ Пустое название таба, отмена создания');
-                  return;
-                }
-
-                final newTab = TabItem(
-                  emoji: emoji,
-                  title: tabTitle,
-                );
-
-                final newTabs = List<TabItem>.from(_tabManager.tabs);
-                final newIndex = newTabs.length;
-                print('  Текущее количество табов: ${_tabManager.tabs.length}');
-                print('  Новый индекс: $newIndex');
-
-                newTabs.add(newTab);
-                _tabManager.updateTabs(newTabs);
-                
-                _messageManager.messagesByTabIndex[newIndex] ??= [];
-                
-                _tabManager.handleTabSelection(newIndex, fromDrawer: true);
-              });
-            },
-          ),
-        ),
-        drawerEnableOpenDragGesture: true,
-        drawerEdgeDragWidth: 60,
-        body: Stack(
-          children: [
-            SafeArea(
-              child: Column(
-                children: [
-                  Builder(
-                    builder: (context) => Header(
-                      onMenuPressed: () {
-                        _focusNode.unfocus();
-                        _scaffoldKey.currentState?.openDrawer();
-                      },
-                      isSelectionMode: _messageManager.isSelectionMode,
-                      onExitSelectionMode: () {
-                        setState(() {
-                          _messageManager.toggleSelectionMode();
-                        });
-                      },
-                    ),
-                  ),
-                  Expanded(
-                    child: Stack(
-                      children: [
-                        PageView.builder(
-                          controller: _tabManager.pageController,
-                          // Убираем ограничение на свайпы
-                          physics: const PageScrollPhysics(),
-                          itemCount: _tabManager.tabs.length,
-                          onPageChanged: (index) {
-                            print('🟦 PAGE VIEW - Page Changed:');
-                            print('  New Index: $index');
-                            print('  Previous Index: ${_tabManager.selectedTabIndex}');
-                            
-                            HapticFeedback.selectionClick();
-                            setState(() {
-                              _tabManager.selectedTabIndex = index;
-                              _messageManager.messagesByTabIndex[index] ??= [];
-                            });
-                          },
-                          itemBuilder: (context, index) => _buildMessageList(index),
-                        ),
-                        AnimatedPositioned(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                          top: _messageManager.isSelectionMode ? -56 : 0,
-                          left: 0,
-                          right: 0,
-                          child: AnimatedOpacity(
-                            duration: const Duration(milliseconds: 200),
-                            opacity: _messageManager.isSelectionMode ? 0 : 1,
-                            child: ScrollTabs(
-                              tabs: _tabManager.tabs,
-                              selectedIndex: _tabManager.selectedTabIndex,
-                              onTabSelected: (index) => setState(() {
-                                _tabManager.handleTabSelection(index);
-                              }),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  InputBar(
-                    controller: _textController,
-                    focusNode: _focusNode,
-                    onSendPressed: _sendMessage,
-                    onAttachPressed: () {},
-                    hintText: 'Новая заметка...',
-                    isSelectionMode: _messageManager.isSelectionMode,
-                    selectedCount: _messageManager.selectedMessages.length,
-                    tabManager: _tabManager,
-                    onDelete: () async {
-                      for (var message in _messageManager.selectedMessages) {
-                        await _messageManager.deleteMessage(message);
-                      }
-                      setState(() {
-                        _messageManager.toggleSelectionMode();
-                      });
-                    },
-                    onMove: (index) async {
-                      for (var message in _messageManager.selectedMessages) {
-                        await _messageManager.moveMessage(message, index);
-                      }
-                      setState(() {
-                        _messageManager.toggleSelectionMode();
-                      });
-                    },
-                  ),
-                ],
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: () => _focusNode.unfocus(),
+        child: Scaffold(
+          key: _scaffoldKey,
+          resizeToAvoidBottomInset: true,
+          backgroundColor: AppColors.getPrimaryBackground(context),
+          drawer: BlocBuilder<TabsBloc, TabsState>(
+            bloc: _tabsBloc,
+            builder: (context, state) => ValueListenableBuilder(
+              valueListenable: _selectedTabIdNotifier,
+              builder: (context, value, _) => SideMenu(
+                tabs: state.tabs,
+                selectedTabId: value ?? '',
+                onTabSelected: (value) => _selectedTabIdNotifier.value = value,
               ),
             ),
-          ],
+          ),
+          drawerEnableOpenDragGesture: true,
+          drawerEdgeDragWidth: 60,
+          body: Stack(
+            children: [
+              SafeArea(
+                child: Column(
+                  children: [
+                    Builder(
+                      builder: (context) => Header(
+                        onMenuPressed: () {
+                          _focusNode.unfocus();
+                          _scaffoldKey.currentState?.openDrawer();
+                        },
+                        isSelectionMode: false,
+                        onExitSelectionMode: () {},
+                      ),
+                    ),
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          BlocBuilder<TabsBloc, TabsState>(
+                            bloc: _tabsBloc,
+                            builder: (context, state) {
+                              return PageView.builder(
+                                // TODO: add controller
+                                // Убираем ограничение на свайпы
+                                physics: const PageScrollPhysics(),
+                                itemCount: state.tabs.length,
+                                onPageChanged: (index) {
+                                  // print('🟦 PAGE VIEW - Page Changed:');
+                                  // print('  New Index: $index');
+                                  // print(
+                                  //     '  Previous Index: ${_tabManager.selectedTabIndex}');
+
+                                  // HapticFeedback.selectionClick();
+                                  // setState(() {
+                                  //   _tabManager.selectedTabIndex = index;
+                                  //   _messageManager.messagesByTabIndex[index] ??=
+                                  //       [];
+                                  // });
+                                },
+                                itemBuilder: (context, index) {
+                                  final tabItem = state.tabs[index];
+                                  final bloc = _messagesBlocs[tabItem.id]!;
+
+                                  return TabItemBody(
+                                    tabItem: tabItem,
+                                    bloc: bloc,
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                          AnimatedPositioned(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOut,
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            child: AnimatedOpacity(
+                              duration: const Duration(milliseconds: 200),
+                              opacity: 1,
+                              child: BlocBuilder<TabsBloc, TabsState>(
+                                bloc: _tabsBloc,
+                                builder: (context, state) => ScrollTabs(
+                                  tabs: state.tabs,
+                                  selectedIndex: 0,
+                                  onTabSelected: (_) {},
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    BlocSelector<TabsBloc, TabsState, List<TabItem>>(
+                      bloc: _tabsBloc,
+                      selector: (state) => state.tabs,
+                      builder: (context, tabs) => InputBar(
+                        controller: _textController,
+                        focusNode: _focusNode,
+                        onSendPressed: _sendMessage,
+                        onAttachPressed: () {},
+                        hintText: 'Новая заметка...',
+                        isSelectionMode: false,
+                        selectedCount: 0,
+                        tabs: tabs,
+                        onDelete: () async {},
+                        onMove: (index) async {},
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
-  }
+      );
 
   @override
   void dispose() {
     _focusNode.dispose();
     _textController.dispose();
-    _tabManager.dispose();
     super.dispose();
   }
 
