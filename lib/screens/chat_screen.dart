@@ -3,9 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:tabs_test/bloc/messages_bloc.dart';
 import 'package:tabs_test/bloc/tab_bloc.dart';
 import 'package:tabs_test/bloc/tabs_bloc.dart';
-import 'package:tabs_test/data/messages_repository.dart';
-import 'package:tabs_test/data/tabs_datasource_storage.dart';
-import 'package:tabs_test/data/tabs_repository.dart';
 import 'package:tabs_test/widgets/dependencies_scope.dart';
 import 'package:tabs_test/widgets/tab_item_body.dart';
 import '../widgets/input_bar.dart';
@@ -23,17 +20,29 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen>
-    with SingleTickerProviderStateMixin {
+class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
+  late final PageController _controller;
   late final TabsBloc _tabsBloc;
+
+  void _pageControllerListener() {
+    final page = _controller.page?.round() ?? 0;
+    _selectedTabIdNotifier.value = _tabsBloc.state.tabs[page].id;
+  }
+
+  void _selectedTabIdListener() {
+    final page = _tabsBloc.state.tabs.indexWhere(
+      (t) => t.id == _selectedTabIdNotifier.value,
+    );
+    _controller.jumpToPage(page);
+  }
 
   final ValueNotifier<String?> _selectedTabIdNotifier = ValueNotifier(null);
 
   /// For each tab, there is a bloc that handles the messages for that tab
-  Map<String, MessagesBloc> _messagesBlocs = {};
+  final Map<String, MessagesBloc> _messagesBlocs = {};
 
   /// For each tab, there is a bloc that handles the tab for that tab
-  Map<String, TabBloc> _tabsBlocs = {};
+  final Map<String, TabBloc> _tabsBlocs = {};
 
   void _tabsBlocListener(TabsState state) {
     final messagesRepository = context.dependencies.messagesRepository;
@@ -60,12 +69,13 @@ class _ChatScreenState extends State<ChatScreen>
 
           _tabsBlocs[tab.id] = _tabsBlocs[tab.id] ??
               TabBloc(
-                repository: TabsRepository(TabsDatasource$Storage()),
+                repository: context.dependencies.tabsRepository,
                 initialState: TabState.idle(
                   tabItem: tab,
                 ),
               );
         }
+
         break;
       default:
     }
@@ -86,6 +96,12 @@ class _ChatScreenState extends State<ChatScreen>
         TabsEvent.fetchTabs(),
       );
     _tabsBloc.stream.listen(_tabsBlocListener);
+
+    _controller = PageController(
+      initialPage: 0,
+    )..addListener(_pageControllerListener);
+
+    _selectedTabIdNotifier.addListener(_selectedTabIdListener);
   }
 
   Future<void> _sendMessage() async {
@@ -115,11 +131,17 @@ class _ChatScreenState extends State<ChatScreen>
             bloc: _tabsBloc,
             builder: (context, state) => ValueListenableBuilder(
               valueListenable: _selectedTabIdNotifier,
-              builder: (context, value, _) => SideMenu(
-                tabs: state.tabs,
-                selectedTabId: value ?? '',
-                onTabSelected: (value) => _selectedTabIdNotifier.value = value,
-              ),
+              builder: (context, value, _) {
+                final tabs = state.tabs;
+
+                return SideMenu(
+                  tabs: tabs,
+                  selectedTabId: value ?? '',
+                  onTabSelected: (value) {
+                    return _selectedTabIdNotifier.value = value;
+                  },
+                );
+              },
             ),
           ),
           drawerEnableOpenDragGesture: true,
@@ -142,55 +164,43 @@ class _ChatScreenState extends State<ChatScreen>
                     Expanded(
                       child: Stack(
                         children: [
-                          BlocBuilder<TabsBloc, TabsState>(
-                            bloc: _tabsBloc,
-                            builder: (context, state) {
-                              return PageView.builder(
-                                // TODO: add controller
-                                // Убираем ограничение на свайпы
-                                physics: const PageScrollPhysics(),
-                                itemCount: state.tabs.length,
-                                onPageChanged: (index) {
-                                  // print('🟦 PAGE VIEW - Page Changed:');
-                                  // print('  New Index: $index');
-                                  // print(
-                                  //     '  Previous Index: ${_tabManager.selectedTabIndex}');
+                          Column(
+                            children: [
+                              SizedBox(
+                                height: 56,
+                              ),
+                              Expanded(
+                                child: BlocBuilder<TabsBloc, TabsState>(
+                                  bloc: _tabsBloc,
+                                  builder: (context, state) => PageView.builder(
+                                    controller: _controller,
+                                    physics: const PageScrollPhysics(),
+                                    itemCount: state.tabs.length,
+                                    itemBuilder: (context, index) {
+                                      final tabItem = state.tabs[index];
+                                      final bloc = _messagesBlocs[tabItem.id]!;
 
-                                  // HapticFeedback.selectionClick();
-                                  // setState(() {
-                                  //   _tabManager.selectedTabIndex = index;
-                                  //   _messageManager.messagesByTabIndex[index] ??=
-                                  //       [];
-                                  // });
-                                },
-                                itemBuilder: (context, index) {
-                                  final tabItem = state.tabs[index];
-                                  final bloc = _messagesBlocs[tabItem.id]!;
-
-                                  return TabItemBody(
-                                    tabItem: tabItem,
-                                    bloc: bloc,
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                          AnimatedPositioned(
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeInOut,
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            child: AnimatedOpacity(
-                              duration: const Duration(milliseconds: 200),
-                              opacity: 1,
-                              child: BlocBuilder<TabsBloc, TabsState>(
-                                bloc: _tabsBloc,
-                                builder: (context, state) => ScrollTabs(
-                                  tabs: state.tabs,
-                                  selectedIndex: 0,
-                                  onTabSelected: (_) {},
+                                      return TabItemBody(
+                                        tabItem: tabItem,
+                                        bloc: bloc,
+                                      );
+                                    },
+                                  ),
                                 ),
+                              ),
+                            ],
+                          ),
+                          ValueListenableBuilder(
+                            valueListenable: _selectedTabIdNotifier,
+                            builder: (context, value, child) =>
+                                BlocBuilder<TabsBloc, TabsState>(
+                              bloc: _tabsBloc,
+                              builder: (context, state) => ScrollTabs(
+                                tabs: state.tabs,
+                                selectedIndex:
+                                    state.tabs.indexWhere((t) => t.id == value),
+                                onTabSelected: (index) => _selectedTabIdNotifier
+                                    .value = state.tabs[index].id,
                               ),
                             ),
                           ),
@@ -225,6 +235,7 @@ class _ChatScreenState extends State<ChatScreen>
   void dispose() {
     _focusNode.dispose();
     _textController.dispose();
+
     super.dispose();
   }
 

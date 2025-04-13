@@ -1,10 +1,11 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../models/tab_item.dart';
-import 'package:flutter/services.dart';
 
 class ScrollTabs extends StatefulWidget {
   final List<TabItem> tabs;
+
   final int selectedIndex;
   final Function(int) onTabSelected;
 
@@ -26,32 +27,34 @@ class _ScrollTabsState extends State<ScrollTabs> {
   @override
   void initState() {
     super.initState();
-    _tabKeys.addAll(List.generate(
-      widget.tabs.length,
-      (index) => GlobalKey(),
-    ));
+    _tabKeys.addAll(
+      List.generate(
+        widget.tabs.length,
+        (index) => GlobalKey(),
+      ),
+    );
   }
 
   @override
   void didUpdateWidget(ScrollTabs oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    // Обновляем _tabKeys, если изменилось количество табов
-    if (widget.tabs.length != oldWidget.tabs.length) {
+    // Update _tabKeys if the tabs list has changed
+    final equality = const ListEquality();
+    if (!equality.equals(widget.tabs, oldWidget.tabs)) {
       _tabKeys.clear();
-      _tabKeys.addAll(List.generate(
-        widget.tabs.length,
-        (index) => GlobalKey(),
-      ));
+      _tabKeys.addAll(
+        List.generate(
+          widget.tabs.length,
+          (index) => GlobalKey(),
+        ),
+      );
     }
 
-    // Прокручиваем к выбранному табу
-    if (widget.selectedIndex != oldWidget.selectedIndex &&
-        widget.selectedIndex != 0) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToSelectedTab();
-      });
+    // Scroll to the selected tab
+    if (widget.selectedIndex != oldWidget.selectedIndex) {
+      _scrollToSelectedTab();
     }
+
+    super.didUpdateWidget(oldWidget);
   }
 
   void _scrollToSelectedTab() {
@@ -68,6 +71,7 @@ class _ScrollTabsState extends State<ScrollTabs> {
 
     final double tabCenter =
         tabBox.localToGlobal(Offset.zero).dx + tabBox.size.width / 2;
+
     final double listCenter =
         listBox.localToGlobal(Offset.zero).dx + listBox.size.width / 2;
 
@@ -89,125 +93,139 @@ class _ScrollTabsState extends State<ScrollTabs> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    print('🔵 ScrollTabs.build:');
-    print('  Количество табов: ${widget.tabs.length}');
-    print('  Выбранный индекс: ${widget.selectedIndex}');
-    print(
-        '  Табы: ${widget.tabs.map((t) => "${t.emoji ?? ''} ${t.title}").toList()}');
+  Widget build(BuildContext context) => SizedBox(
+        height: 56,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppColors.getPrimaryBackground(context),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.getPrimaryBackground(context),
+                blurRadius: 16,
+                spreadRadius: 8,
+              ),
+              BoxShadow(
+                color: AppColors.getPrimaryBackground(context),
+                blurRadius: 16,
+                spreadRadius: 8,
+              ),
+            ],
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 8,
+            ),
+            controller: _scrollController,
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              spacing: 8,
+              children: _buildItems(),
+            ),
+          ),
+        ),
+      );
 
-    return Container(
-      height: 56, // Фиксированная высота для всего ScrollTabs
+  List<Widget> _buildItems() => List.generate(
+        widget.tabs.length,
+        (index) => _Tab(
+          tabItem: widget.tabs[index],
+          isSelected: index == widget.selectedIndex,
+          key: _tabKeys[index],
+          onTap: () => _handleTabTap(index),
+        ),
+      );
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+}
+
+/// {@template tabs_tab_bar}
+/// _Tab widget.
+/// {@endtemplate}
+class _Tab extends StatelessWidget {
+  /// {@macro tabs_tab_bar}
+  const _Tab({
+    required this.tabItem,
+    required this.isSelected,
+    this.onTap,
+    super.key, // ignore: unused_element
+  });
+
+  final TabItem tabItem;
+
+  final bool isSelected;
+
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final bgColor = isSelected
+        ? AppColors.getSecondaryBackground(context)
+        : AppColors.getPrimaryBackground(context);
+
+    final borderColor = isSelected
+        ? AppColors.getDividedColor(context)
+        : AppColors.getTertiaryBackground(context);
+
+    final textColor = isSelected
+        ? AppColors.getPrimaryText(context)
+        : AppColors.getSecondaryText(context);
+
+    final borderRadius = BorderRadius.circular(20);
+
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.getPrimaryBackground(context),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.getPrimaryBackground(context),
-            blurRadius: 16,
-            spreadRadius: 8,
-          ),
-          BoxShadow(
-            color: AppColors.getPrimaryBackground(context),
-            blurRadius: 16,
-            spreadRadius: 8,
-          ),
-        ],
+        color: bgColor,
+        borderRadius: borderRadius,
+        border: Border.all(
+          color: borderColor,
+          width: 1,
+        ),
       ),
-      child: Container(
-        color: AppColors.getPrimaryBackground(context),
-        child: SingleChildScrollView(
-          controller: _scrollController,
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          child: Row(
-            children: List.generate(
-              widget.tabs.length,
-              (index) => Padding(
-                key: _tabKeys[index],
-                padding: EdgeInsets.only(
-                  left: index == 0 ? 16.0 : 4.0,
-                  right: index == widget.tabs.length - 1 ? 16.0 : 4.0,
-                ),
-                child: TweenAnimationBuilder<double>(
-                  tween: Tween(
-                    begin: 0.0,
-                    end: widget.selectedIndex == index ? 1.0 : 0.0,
-                  ),
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeInOut,
-                  builder: (context, value, child) {
-                    final isSelected = widget.selectedIndex == index;
-                    return GestureDetector(
-                      onTap: () => _handleTabTap(index),
-                      child: Container(
-                        height: 40, // Фиксированная высота для каждого таба
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Color.lerp(
-                            AppColors.getPrimaryBackground(context),
-                            AppColors.getSecondaryBackground(context),
-                            value,
-                          ) ??
-                              AppColors.getPrimaryBackground(context),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: Color.lerp(
-                              AppColors.getDividedColor(context),
-                              AppColors.getTertiaryBackground(context),
-                              value,
-                            ) ??
-                                AppColors.getDividedColor(context),
-                            width: 1,
-                          ),
-                        ),
-                        child: Center( // Центрируем содержимое по вертикали
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (widget.tabs[index].emoji != null) ...[
-                                Text(
-                                  widget.tabs[index].emoji!,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    height: 1, // Убираем лишнее пространство у эмодзи
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                              ],
-                              Text(
-                                widget.tabs[index].title,
-                                style: TextStyle(
-                                  color: isSelected
-                                      ? AppColors.getPrimaryText(context)
-                                      : AppColors.getSecondaryText(context),
-                                  fontSize: 16,
-                                  height: 1, // Убираем лишнее пространство у текста
-                                  fontWeight: isSelected
-                                      ? FontWeight.w600
-                                      : FontWeight.normal,
-                                  letterSpacing: 0.2,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+      child: Material(
+        color: Colors.transparent,
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: borderRadius,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16,
+            ),
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                spacing: 8,
+                children: [
+                  if (tabItem.emoji != null)
+                    Text(
+                      tabItem.emoji!,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        height: 1,
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  Text(
+                    tabItem.title,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 16,
+                      height: 1,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.normal,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
   }
 }

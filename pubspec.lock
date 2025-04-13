@@ -21,10 +21,18 @@ packages:
     dependency: "direct main"
     description:
       name: bloc
-      sha256: "52c10575f4445c61dd9e0cafcc6356fdd827c4c64dd7945ef3c4105f6b6ac189"
+      sha256: "106842ad6569f0b60297619e9e0b1885c2fb9bf84812935490e6c5275777804e"
       url: "https://pub.dev"
     source: hosted
-    version: "9.0.0"
+    version: "8.1.4"
+  bloc_concurrency:
+    dependency: "direct main"
+    description:
+      name: bloc_concurrency
+      sha256: "456b7a3616a7c1ceb975c14441b3f198bf57d81cb95b7c6de5cb0c60201afcd8"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.5"
   boolean_selector:
     dependency: transitive
     description:
@@ -106,10 +114,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_bloc
-      sha256: "1046d719fbdf230330d3443187cc33cc11963d15c9089f6cc56faa42a4c5f0cc"
+      sha256: b594505eac31a0518bdcb4b5b79573b8d9117b193cc80cc12e17d639b10aa27a
       url: "https://pub.dev"
     source: hosted
-    version: "9.1.0"
+    version: "8.1.6"
   flutter_lints:
     dependency: "direct dev"
     description:
@@ -376,6 +384,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.4"
+  stream_transform:
+    dependency: transitive
+    description:
+      name: stream_transform
+      sha256: ad47125e588cfd37a9a7f86c7d6356dde8dfe89d071d293f80ca9e9273a33871
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.1"
   string_scanner:
     dependency: transitive
     description:

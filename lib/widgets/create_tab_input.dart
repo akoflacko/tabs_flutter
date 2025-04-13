@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tabs_test/bloc/create_tab_bloc.dart';
+import 'package:tabs_test/bloc/tabs_bloc.dart';
 import 'package:tabs_test/models/tab_item.dart';
 import 'package:tabs_test/theme/app_colors.dart';
 import 'package:tabs_test/widgets/dependencies_scope.dart';
@@ -43,6 +46,24 @@ class _CreateTabInputState extends State<CreateTabInput> {
   late final Listenable _listenable;
 
   late final CreateTabBloc _bloc;
+
+  StreamSubscription<void>? _blocSubscription;
+
+  void _blocListener(CreateTabState state) {
+    if (state is CreateTabState$Successful) {
+      _controller.clear();
+      setState(() => _selectedEmoji = null);
+
+      final tabsBloc = context.dependencies.tabsBloc;
+      tabsBloc.add(
+        TabsEvent.tabCreated(
+          tabItem: state.tabItem,
+        ),
+      );
+
+      widget.onTabCreated?.call(state.tabItem);
+    }
+  }
 
   // #region Text Editing Controller Listener
 
@@ -140,6 +161,8 @@ class _CreateTabInputState extends State<CreateTabInput> {
       _controller,
       _keyboardListenerFocusNode,
     ]);
+
+    _blocSubscription = _bloc.stream.listen(_blocListener);
   }
 
   @override
@@ -152,6 +175,7 @@ class _CreateTabInputState extends State<CreateTabInput> {
 
     _keyboardListenerFocusNode.dispose();
 
+    _blocSubscription?.cancel();
     _bloc.close();
 
     super.dispose();
@@ -196,18 +220,8 @@ class _CreateTabInputState extends State<CreateTabInput> {
 
   @override
   Widget build(BuildContext context) =>
-      BlocConsumer<CreateTabBloc, CreateTabState>(
+      BlocBuilder<CreateTabBloc, CreateTabState>(
         bloc: _bloc,
-        listener: (context, state) {
-          switch (state) {
-            case CreateTabState$Successful state:
-              _controller.clear();
-              setState(() => _selectedEmoji = null);
-              widget.onTabCreated?.call(state.tabItem);
-              break;
-            default:
-          }
-        },
         builder: (context, state) => ListenableBuilder(
           listenable: _listenable,
           builder: (context, _) => SideMenuTileWrapper(
