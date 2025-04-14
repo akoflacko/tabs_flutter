@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:tabs_test/bloc/messages_bloc.dart';
@@ -5,6 +7,7 @@ import 'package:tabs_test/bloc/tab_bloc.dart';
 import 'package:tabs_test/bloc/tabs_bloc.dart';
 import 'package:tabs_test/widgets/dependencies_scope.dart';
 import 'package:tabs_test/widgets/tab_item_body.dart';
+
 import '../widgets/input_bar.dart';
 import '../widgets/scroll_tabs.dart';
 import '../widgets/header.dart';
@@ -20,106 +23,7 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
-  late final PageController _controller;
-  late final TabsBloc _tabsBloc;
-
-  void _pageControllerListener() {
-    final page = _controller.page?.round() ?? 0;
-    _selectedTabIdNotifier.value = _tabsBloc.state.tabs[page].id;
-  }
-
-  void _selectedTabIdListener() {
-    final page = _tabsBloc.state.tabs.indexWhere(
-      (t) => t.id == _selectedTabIdNotifier.value,
-    );
-    _controller.jumpToPage(page);
-  }
-
-  final ValueNotifier<String?> _selectedTabIdNotifier = ValueNotifier(null);
-
-  /// For each tab, there is a bloc that handles the messages for that tab
-  final Map<String, MessagesBloc> _messagesBlocs = {};
-
-  /// For each tab, there is a bloc that handles the tab for that tab
-  final Map<String, TabBloc> _tabsBlocs = {};
-
-  void _tabsBlocListener(TabsState state) {
-    final messagesRepository = context.dependencies.messagesRepository;
-
-    switch (state) {
-      case TabsState$Successful state:
-        final tabs = state.tabs;
-        for (final tab in tabs) {
-          if (_selectedTabIdNotifier.value == null) {
-            _selectedTabIdNotifier.value = tab.id;
-          }
-
-          _messagesBlocs[tab.id] = _messagesBlocs[tab.id] ??
-              MessagesBloc(
-                repository: messagesRepository,
-                initialState: MessagesState.idle(
-                  tabId: tab.id,
-                  messages: const [],
-                ),
-              )
-            ..add(
-              MessagesEvent.fetch(),
-            );
-
-          _tabsBlocs[tab.id] = _tabsBlocs[tab.id] ??
-              TabBloc(
-                repository: context.dependencies.tabsRepository,
-                initialState: TabState.idle(
-                  tabItem: tab,
-                ),
-              );
-        }
-
-        break;
-      default:
-    }
-  }
-
-  final _textController = TextEditingController();
-  final _focusNode = FocusNode();
-  double? _dragStartX;
-
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
-  @override
-  void initState() {
-    super.initState();
-
-    _tabsBloc = context.dependencies.tabsBloc
-      ..add(
-        TabsEvent.fetchTabs(),
-      );
-    _tabsBloc.stream.listen(_tabsBlocListener);
-
-    _controller = PageController(
-      initialPage: 0,
-    )..addListener(_pageControllerListener);
-
-    _selectedTabIdNotifier.addListener(_selectedTabIdListener);
-  }
-
-  Future<void> _sendMessage() async {
-    if (_textController.text.trim().isEmpty) return;
-    if (_selectedTabIdNotifier.value == null) return;
-
-    final message = Message(
-      text: _textController.text,
-      createdAt: DateTime.now(),
-      tabId: _selectedTabIdNotifier.value!,
-    );
-
-    final bloc = _messagesBlocs[message.tabId]!;
-    _textController.clear();
-
-    bloc.add(MessagesEvent.send(message: message));
-  }
-
+class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin, _ChatScreenStateMixin {
   @override
   Widget build(BuildContext context) => GestureDetector(
         onTap: () => _focusNode.unfocus(),
@@ -129,19 +33,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           backgroundColor: AppColors.getPrimaryBackground(context),
           drawer: BlocBuilder<TabsBloc, TabsState>(
             bloc: _tabsBloc,
-            builder: (context, state) => ValueListenableBuilder(
-              valueListenable: _selectedTabIdNotifier,
-              builder: (context, value, _) {
-                final tabs = state.tabs;
-
-                return SideMenu(
-                  tabs: tabs,
-                  selectedTabId: value ?? '',
-                  onTabSelected: (value) {
-                    return _selectedTabIdNotifier.value = value;
-                  },
-                );
-              },
+            builder: (context, state) => SideMenu(
+              tabs: state.tabs,
+              pageController: _controller,
             ),
           ),
           drawerEnableOpenDragGesture: true,
@@ -157,8 +51,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                           _focusNode.unfocus();
                           _scaffoldKey.currentState?.openDrawer();
                         },
-                        isSelectionMode: false,
-                        onExitSelectionMode: () {},
+                        isSelectionMode: _selectedMessages.isNotEmpty,
+                        onExitSelectionMode: () => _disableEditingMode(),
                       ),
                     ),
                     Expanded(
@@ -166,15 +60,32 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                         children: [
                           Column(
                             children: [
-                              SizedBox(
-                                height: 56,
+                              AnimatedSwitcher(
+                                duration: Durations.short2,
+                                transitionBuilder: (child, animation) => FadeTransition(
+                                  opacity: animation,
+                                  child: SizeTransition(
+                                    sizeFactor: animation,
+                                    axis: Axis.vertical,
+                                    axisAlignment: 0.0,
+                                    child: child,
+                                  ),
+                                ),
+                                child: _selectedMessages.isEmpty
+                                    ? SizedBox(
+                                        key: const Key('empty'),
+                                        height: 56,
+                                      )
+                                    : const SizedBox.shrink(
+                                        key: Key('not_empty'),
+                                      ),
                               ),
                               Expanded(
                                 child: BlocBuilder<TabsBloc, TabsState>(
                                   bloc: _tabsBloc,
                                   builder: (context, state) => PageView.builder(
                                     controller: _controller,
-                                    physics: const PageScrollPhysics(),
+                                    physics: _selectedMessages.isEmpty ? const BouncingScrollPhysics() : const NeverScrollableScrollPhysics(),
                                     itemCount: state.tabs.length,
                                     itemBuilder: (context, index) {
                                       final tabItem = state.tabs[index];
@@ -183,6 +94,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                                       return TabItemBody(
                                         tabItem: tabItem,
                                         bloc: bloc,
+                                        selectedMessagesIds: _selectedMessages.map((e) => e.id).toList(),
+                                        onMessageLongPress: _onMessageLongPress,
+                                        onMessageSelected: _onMessageSelected,
                                       );
                                     },
                                   ),
@@ -190,19 +104,33 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                               ),
                             ],
                           ),
-                          ValueListenableBuilder(
-                            valueListenable: _selectedTabIdNotifier,
-                            builder: (context, value, child) =>
-                                BlocBuilder<TabsBloc, TabsState>(
-                              bloc: _tabsBloc,
-                              builder: (context, state) => ScrollTabs(
-                                tabs: state.tabs,
-                                selectedIndex:
-                                    state.tabs.indexWhere((t) => t.id == value),
-                                onTabSelected: (index) => _selectedTabIdNotifier
-                                    .value = state.tabs[index].id,
+                          AnimatedSwitcher(
+                            duration: Durations.short2,
+                            transitionBuilder: (child, animation) => FadeTransition(
+                              opacity: animation,
+                              child: SizeTransition(
+                                sizeFactor: animation,
+                                axis: Axis.vertical,
+                                axisAlignment: 0.0,
+                                child: child,
                               ),
                             ),
+                            child: _selectedMessages.isEmpty
+                                ? BlocBuilder<TabsBloc, TabsState>(
+                                    key: _scrollTabsKey,
+                                    bloc: _tabsBloc,
+                                    buildWhen: (previous, current) => previous.tabs != current.tabs,
+                                    builder: (context, blocState) {
+                                      final tabs = List.of(blocState.tabs);
+
+                                      return ScrollTabs(
+                                        tabs: tabs,
+                                        pageController: _controller,
+                                        initialIndex: _controller.page?.round() ?? 0,
+                                      );
+                                    },
+                                  )
+                                : const SizedBox.shrink(),
                           ),
                         ],
                       ),
@@ -216,11 +144,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                         onSendPressed: _sendMessage,
                         onAttachPressed: () {},
                         hintText: 'Новая заметка...',
-                        isSelectionMode: false,
-                        selectedCount: 0,
+                        isSelectionMode: _selectedMessages.isNotEmpty,
+                        selectedCount: _selectedMessages.length,
+                        tabIdOfSelectedMessages: _selectedMessages.firstOrNull?.tabId,
                         tabs: tabs,
-                        onDelete: () async {},
-                        onMove: (index) async {},
+                        onDelete: _onDelete,
+                        onMove: _onMove,
                       ),
                     ),
                   ],
@@ -230,32 +159,221 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           ),
         ),
       );
+}
+
+mixin _ChatScreenStateMixin on State<ChatScreen> {
+  final GlobalKey _scrollTabsKey = GlobalKey();
+
+  late final PageController _controller;
+
+  late final TabsBloc _tabsBloc;
+
+  // #region Tabs Bloc Listener
+
+  StreamSubscription<void>? _tabsBlocSubscription;
+
+  /// For each tab, there is a bloc that handles the messages for that tab
+  final Map<String, MessagesBloc> _messagesBlocs = {};
+
+  /// For each tab, there is a bloc that handles the tab for that tab
+  final Map<String, TabBloc> _tabsBlocs = {};
+
+  /// Listener for each MessagesBloc
+  final Map<String, StreamSubscription<void>> _messagesBlocsSubscriptions = {};
+
+  MessagesBloc messagesBloc(String tabId) {
+    if (_messagesBlocs.containsKey(tabId)) {
+      return _messagesBlocs[tabId]!;
+    } else {
+      final messagesBloc = MessagesBloc(
+        repository: context.dependencies.messagesRepository,
+        initialState: MessagesState.idle(
+          tabId: tabId,
+          messages: const [],
+        ),
+      )..add(MessagesEvent.fetch());
+      _messagesBlocs[tabId] = messagesBloc;
+      _messagesBlocsSubscriptions[tabId] = messagesBloc.stream.listen(
+        _messagesBlocListener,
+      );
+      return messagesBloc;
+    }
+  }
+
+  void _tabsBlocListener(TabsState state) {
+    final currentTabIds = _tabsBlocs.keys.toList();
+    final newTabIds = state.tabs.map((tab) => tab.id).toList();
+
+    // Remove tabs that are no longer present
+    for (final tabId in currentTabIds) {
+      if (!newTabIds.contains(tabId)) {
+        _messagesBlocsSubscriptions[tabId]?.cancel();
+        _messagesBlocs[tabId]?.close();
+        _tabsBlocs[tabId]?.close();
+        _messagesBlocs.remove(tabId);
+        _tabsBlocs.remove(tabId);
+      }
+    }
+
+    // Add new tabs
+    for (final tabId in newTabIds) {
+      if (!_messagesBlocs.containsKey(tabId)) {
+        _messagesBlocs[tabId] = messagesBloc(tabId);
+
+        _tabsBlocs[tabId] = _tabsBlocs[tabId] ??
+            TabBloc(
+              repository: context.dependencies.tabsRepository,
+              initialState: TabState.idle(
+                tabItem: state.tabs.firstWhere(
+                  (t) => t.id == tabId,
+                ),
+              ),
+            );
+      }
+    }
+
+    if (state.createdTab != null) {
+      _controller.animateToPage(
+        state.tabs.indexOf(state.createdTab!),
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  // #endregion
+
+  // #region Messages Bloc Listener
+
+  void _messagesBlocListener(MessagesState state) {
+    if (state is MessagesState$MessagesMoved) {
+      final tabId = state.movedMessages.firstOrNull?.tabId;
+      if (tabId == null) return;
+
+      final messagesBloc = _messagesBlocs[tabId];
+      if (messagesBloc == null) return;
+
+      messagesBloc.add(
+        MessagesEvent.handleMovedMessages(
+          movedMessages: state.movedMessages,
+        ),
+      );
+    }
+  }
+
+  // #endregion
+
+  final _textController = TextEditingController();
+  final _focusNode = FocusNode();
+
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  // #region Lifecycle
+
+  @override
+  void initState() {
+    super.initState();
+
+    _tabsBloc = context.dependencies.tabsBloc
+      ..add(
+        TabsEvent.fetchTabs(),
+      );
+
+    _tabsBlocSubscription = _tabsBloc.stream.listen(
+      _tabsBlocListener,
+    );
+
+    _controller = PageController(initialPage: 0);
+  }
 
   @override
   void dispose() {
     _focusNode.dispose();
     _textController.dispose();
 
+    _tabsBlocSubscription?.cancel();
+
+    for (final bloc in _messagesBlocs.values) {
+      bloc.close();
+    }
+    for (final bloc in _tabsBlocs.values) {
+      bloc.close();
+    }
+
     super.dispose();
   }
 
-  bool isEmoji(String text) {
-    if (text.isEmpty) return false;
+  // #endregion
 
-    final runes = text.runes.toList();
+  Future<void> _sendMessage() async {
+    if (_textController.text.trim().isEmpty) return;
+    final page = _controller.page?.round();
+    if (page == null) return;
 
-    for (final rune in runes) {
-      final isInRange =
-          (rune >= 0x1F300 && rune <= 0x1F9FF) || // Основные эмодзи
-              (rune >= 0x2600 && rune <= 0x26FF) || // Разные символы
-              (rune >= 0x2700 && rune <= 0x27BF) || // Dingbats
-              (rune >= 0xFE00 && rune <= 0xFE0F); // Вариации
+    final currentTab = _tabsBloc.state.tabs[page];
 
-      if (!isInRange) {
-        return false;
-      }
+    final message = Message(
+      text: _textController.text,
+      createdAt: DateTime.now(),
+      tabId: currentTab.id,
+    );
+
+    final bloc = _messagesBlocs[message.tabId]!;
+    _textController.clear();
+
+    bloc.add(MessagesEvent.send(message: message));
+  }
+
+  // #region Editing Mode
+
+  void _disableEditingMode() => setState(() => _selectedMessages = []);
+
+  List<Message> _selectedMessages = [];
+
+  void _onMessageLongPress(Message message) => setState(() => _selectedMessages = [
+        message,
+      ]);
+
+  void _onMessageSelected(Message message) {
+    if (_selectedMessages.isEmpty) return;
+
+    List<Message> selectedMessages = List.of(_selectedMessages);
+
+    if (selectedMessages.contains(message)) {
+      selectedMessages.remove(message);
+    } else {
+      selectedMessages.add(message);
     }
 
-    return true;
+    setState(() => _selectedMessages = selectedMessages);
   }
+
+  void _onDelete() {
+    if (_selectedMessages.isEmpty) return;
+
+    final bloc = _messagesBlocs[_selectedMessages.first.tabId];
+    bloc?.add(
+      MessagesEvent.deleteMessages(
+        messages: _selectedMessages,
+      ),
+    );
+
+    setState(() => _selectedMessages = []);
+  }
+
+  void _onMove(String tabId) {
+    if (_selectedMessages.isEmpty) return;
+
+    final bloc = _messagesBlocs[_selectedMessages.first.tabId];
+    bloc?.add(
+      MessagesEvent.moveMessages(
+        messages: _selectedMessages,
+        toTabId: tabId,
+      ),
+    );
+
+    setState(() => _selectedMessages = []);
+  }
+
+  // #endregion
 }

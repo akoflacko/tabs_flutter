@@ -15,6 +15,9 @@ class TabItemBody extends StatefulWidget {
   const TabItemBody({
     required this.tabItem,
     required this.bloc,
+    this.onMessageLongPress,
+    this.onMessageSelected,
+    this.selectedMessagesIds = const [],
     super.key, // ignore: unused_element
   });
 
@@ -23,6 +26,12 @@ class TabItemBody extends StatefulWidget {
   /// Лучше передавать через Provider/InheritedWidget
   final MessagesBloc bloc;
 
+  final List<String> selectedMessagesIds;
+
+  final ValueChanged<Message>? onMessageLongPress;
+
+  final ValueChanged<Message>? onMessageSelected;
+
   @override
   State<TabItemBody> createState() => _TabItemBodyState();
 }
@@ -30,27 +39,17 @@ class TabItemBody extends StatefulWidget {
 /// State for widget MessagesListView.
 class _TabItemBodyState extends State<TabItemBody> {
   @override
-  Widget build(BuildContext context) =>
-      BlocBuilder<MessagesBloc, MessagesState>(
+  Widget build(BuildContext context) => BlocBuilder<MessagesBloc, MessagesState>(
         bloc: widget.bloc,
         builder: (context, state) {
           if (state.isProcessing && state.messages.isEmpty) {
-            return const Center(
-              child: CircularProgressIndicator.adaptive(),
-            );
+            return const Center(child: CircularProgressIndicator.adaptive());
           }
 
           if (state.error != null && state.messages.isEmpty) {
             final errorString = Error.safeToString(state.error);
 
-            return Center(
-              child: Text(
-                errorString,
-                style: const TextStyle(
-                  color: Colors.red,
-                ),
-              ),
-            );
+            return Center(child: Text(errorString, style: const TextStyle(color: Colors.red)));
           }
 
           if (state.messages.isEmpty) {
@@ -85,6 +84,9 @@ class _TabItemBodyState extends State<TabItemBody> {
           return _MessagesListView(
             tabItem: widget.tabItem,
             messages: state.messages.reversed.toList(),
+            onMessageLongPress: widget.onMessageLongPress,
+            onMessageSelected: widget.onMessageSelected,
+            selectedMessagesIds: widget.selectedMessagesIds,
           );
         },
       );
@@ -98,12 +100,21 @@ class _MessagesListView extends StatefulWidget {
   const _MessagesListView({
     required this.tabItem,
     required this.messages,
-    super.key, // ignore: unused_element
+    this.onMessageLongPress,
+    this.onMessageSelected,
+    this.selectedMessagesIds = const [],
+    super.key, // ignore: unused_element_parameter
   });
 
   final TabItem tabItem;
 
   final List<Message> messages;
+
+  final List<String> selectedMessagesIds;
+
+  final ValueChanged<Message>? onMessageLongPress;
+
+  final ValueChanged<Message>? onMessageSelected;
 
   @override
   State<_MessagesListView> createState() => __MessagesListViewState();
@@ -125,7 +136,7 @@ class __MessagesListViewState extends State<_MessagesListView> {
   /* #endregion */
 
   @override
-  Widget build(BuildContext context) => ListView.builder(
+  Widget build(BuildContext context) => ListView.separated(
         key: PageStorageKey(widget.tabItem.id),
         itemCount: widget.messages.length,
         reverse: true,
@@ -133,13 +144,24 @@ class __MessagesListViewState extends State<_MessagesListView> {
         itemBuilder: (context, index) {
           final message = widget.messages[index];
 
+          final selectionModeEnabled = widget.selectedMessagesIds.isNotEmpty;
+          final isSelected = widget.selectedMessagesIds.contains(message.id);
+
           return MessageBubble(
+            key: ValueKey(message.id),
             message: message,
-            isSelectionMode: false,
-            isSelected: false,
-            onLongPress: () {},
-            onSelect: () {},
+            isSelected: isSelected,
+            selectionModeEnabled: selectionModeEnabled,
+            onLongPress: () => widget.onMessageLongPress?.call(
+              message,
+            ),
+            onSelect: () => widget.onMessageSelected?.call(
+              message,
+            ),
           );
         },
+        separatorBuilder: (context, index) => const SizedBox(
+          height: 8,
+        ),
       );
 }

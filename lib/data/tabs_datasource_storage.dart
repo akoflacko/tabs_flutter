@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer';
 import 'dart:io';
 
 import 'package:path/path.dart' as path;
@@ -43,11 +44,7 @@ class TabsDatasource$Storage implements ITabsDatasource, IMessagesDatasource {
       return;
     }
 
-    _tabsJson = TabsJson.fromJson(
-      jsonDecode(
-        jsonContent,
-      ),
-    );
+    _tabsJson = TabsJson.fromJson(jsonDecode(jsonContent));
   }
 
   Future<void> _addDefaultTabIfAbsent() async {
@@ -87,9 +84,7 @@ class TabsDatasource$Storage implements ITabsDatasource, IMessagesDatasource {
   String _buildTabDirPath(String tabId) => path.join(_baseDir.path, tabId);
 
   @override
-  Future<TabItem> createTab(
-    TabItem tab,
-  ) async {
+  Future<TabItem> createTab(TabItem tab) async {
     await _init();
 
     final dir = Directory(_buildTabDirPath(tab.id));
@@ -106,9 +101,7 @@ class TabsDatasource$Storage implements ITabsDatasource, IMessagesDatasource {
   // #region Remove Tab
 
   @override
-  Future<void> deleteTab(
-    TabItem tab,
-  ) async {
+  Future<void> deleteTab(TabItem tab) async {
     await _init();
 
     final dir = Directory(_buildTabDirPath(tab.id));
@@ -122,9 +115,7 @@ class TabsDatasource$Storage implements ITabsDatasource, IMessagesDatasource {
   // #region Update Tab
 
   @override
-  Future<TabItem> updateTab(
-    TabItem tab,
-  ) async {
+  Future<TabItem> updateTab(TabItem tab) async {
     await _init();
 
     _tabsJson.tabs.removeWhere((element) => element.id == tab.id);
@@ -146,18 +137,14 @@ class TabsDatasource$Storage implements ITabsDatasource, IMessagesDatasource {
 
   // #endregion
 
-  Future<void> _updateTabsJson(
-    TabsJson json,
-  ) async {
+  Future<void> _updateTabsJson(TabsJson json) async {
     final jsonContent = jsonEncode(json.toJson());
     await _tabsJsonFile.writeAsString(jsonContent);
     _tabsJson = json;
   }
 
   @override
-  Future<Message> createMessage(
-    Message message,
-  ) async {
+  Future<Message> createMessage(Message message) async {
     final tabId = message.tabId;
     final tabDir = Directory(_buildTabDirPath(tabId));
     final isExist = await tabDir.exists();
@@ -181,23 +168,26 @@ class TabsDatasource$Storage implements ITabsDatasource, IMessagesDatasource {
   }
 
   @override
-  Future<void> deleteMessage(
-    Message message,
-  ) async {
+  Future<void> deleteMessage(Message message) async {
     final tabId = message.tabId;
     final tabDir = Directory(_buildTabDirPath(tabId));
     final isExist = await tabDir.exists();
     if (!isExist) throw Exception('Tab not found');
 
-    final fileName = 'message_${message.id}';
+    final fileName = 'message_${message.id}.md';
     final file = File(path.join(tabDir.path, fileName));
     await file.delete();
   }
 
   @override
-  Future<List<Message>> fetchMessages(
-    String tabId,
-  ) async {
+  Future<void> deleteMessages(List<Message> messages) async {
+    final futures = messages.map((message) => deleteMessage(message));
+    final stream = Stream.fromFutures(futures);
+    await stream.toList();
+  }
+
+  @override
+  Future<List<Message>> fetchMessages(String tabId) async {
     final tabDir = Directory(_buildTabDirPath(tabId));
     final isExist = await tabDir.exists();
     if (!isExist) throw Exception('Tab not found');
@@ -209,7 +199,8 @@ class TabsDatasource$Storage implements ITabsDatasource, IMessagesDatasource {
 
       final content = await entity.readAsString();
 
-      final message = _parseMessageFromMd(tabId, content);
+      final fileName = path.basename(entity.path);
+      final message = _parseMessageFromMd(tabId, content, fileName);
       messages.add(message);
     }
 
@@ -217,17 +208,28 @@ class TabsDatasource$Storage implements ITabsDatasource, IMessagesDatasource {
   }
 
   @override
-  Future<Message> moveMessage(
-    Message message,
-    String newTabId,
-  ) async {
+  Future<Message> moveMessage(Message message, String newTabId) async {
     await deleteMessage(message);
     message = message.copyWith(tabId: newTabId);
     await createMessage(message);
     return message;
   }
 
-  Message _parseMessageFromMd(String tabId, String content) {
+  @override
+  Future<List<Message>> moveMessages(
+    List<Message> messages,
+    String newTabId,
+  ) {
+    final futures = messages.map((message) => moveMessage(message, newTabId));
+    final stream = Stream.fromFutures(futures);
+    return stream.toList();
+  }
+
+  Message _parseMessageFromMd(
+    String tabId,
+    String content,
+    String fileName,
+  ) {
     final parts = content.split('---');
     if (parts.length < 3) {
       throw FormatException('Invalid markdown format');
@@ -258,7 +260,11 @@ class TabsDatasource$Storage implements ITabsDatasource, IMessagesDatasource {
       throw FormatException('Timestamp is required');
     }
 
+    final id = path.basenameWithoutExtension(fileName).replaceAll('message_', '');
+    log('id: $id');
+
     return Message(
+      id: id,
       text: text,
       createdAt: timestamp,
       tabId: tabId,
@@ -266,9 +272,7 @@ class TabsDatasource$Storage implements ITabsDatasource, IMessagesDatasource {
   }
 
   @override
-  Future<Message> updateMessage(
-    Message message,
-  ) async {
+  Future<Message> updateMessage(Message message) async {
     final tabId = message.tabId;
     final tabDir = Directory(_buildTabDirPath(tabId));
     final isExist = await tabDir.exists();
@@ -295,19 +299,10 @@ class TabsDatasource$Storage implements ITabsDatasource, IMessagesDatasource {
 class TabsJson {
   final List<TabItem> tabs;
 
-  const TabsJson({
-    required this.tabs,
-  });
+  const TabsJson({required this.tabs});
 
-  factory TabsJson.fromJson(Map<String, Object?> json) => TabsJson(
-        tabs: List<TabItem>.from(
-          (json['tabs'] as List).map(
-            (e) => TabItem.fromJson(
-              e as Map<String, Object?>,
-            ),
-          ),
-        ),
-      );
+  factory TabsJson.fromJson(Map<String, Object?> json) =>
+      TabsJson(tabs: List<TabItem>.from((json['tabs'] as List).map((e) => TabItem.fromJson(e as Map<String, Object?>))));
 
   Map<String, Object?> toJson() => {'tabs': tabs};
 }

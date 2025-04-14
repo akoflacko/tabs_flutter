@@ -14,11 +14,17 @@ abstract interface class IMessagesRepository {
   /// Deletes a message.
   Future<void> deleteMessage(Message message);
 
+  /// Deletes multiple messages.
+  Future<void> deleteMessages(List<Message> messages);
+
   /// Creates a message.
   Future<Message> createMessage(Message message);
 
   /// Move a message to a new tab.
   Future<Message> moveMessage(Message message, String newTabId);
+
+  /// Move multiple messages to a new tab.
+  Future<List<Message>> moveMessages(List<Message> messages, String newTabId);
 }
 
 class MessagesRepository implements IMessagesRepository {
@@ -27,28 +33,23 @@ class MessagesRepository implements IMessagesRepository {
   MessagesRepository(this._datasource);
 
   @override
-  Future<List<Message>> fetchMessages(String tabId) =>
-      _datasource.fetchMessages(tabId);
+  Future<List<Message>> fetchMessages(String tabId) => _datasource.fetchMessages(tabId);
 
   @override
-  Future<Message> updateMessage(Message message) =>
-      _datasource.updateMessage(message);
+  Future<Message> updateMessage(Message message) => _datasource.updateMessage(message);
 
   @override
-  Future<void> deleteMessage(Message message) =>
-      _datasource.deleteMessage(message);
+  Future<void> deleteMessage(Message message) => _datasource.deleteMessage(message);
 
   @override
-  Future<Message> createMessage(Message message) =>
-      _datasource.createMessage(message);
+  Future<void> deleteMessages(List<Message> messages) => _datasource.deleteMessages(messages);
 
   @override
-  Future<Message> moveMessage(
-    Message message,
-    String newTabId,
-  ) =>
-      _datasource.moveMessage(
-        message,
-        newTabId,
-      );
+  Future<Message> createMessage(Message message) => _datasource.createMessage(message);
+
+  @override
+  Future<Message> moveMessage(Message message, String newTabId) => _datasource.moveMessage(message, newTabId);
+
+  @override
+  Future<List<Message>> moveMessages(List<Message> messages, String newTabId) => _datasource.moveMessages(messages, newTabId);
 }

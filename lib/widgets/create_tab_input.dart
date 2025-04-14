@@ -55,11 +55,7 @@ class _CreateTabInputState extends State<CreateTabInput> {
       setState(() => _selectedEmoji = null);
 
       final tabsBloc = context.dependencies.tabsBloc;
-      tabsBloc.add(
-        TabsEvent.tabCreated(
-          tabItem: state.tabItem,
-        ),
-      );
+      tabsBloc.add(TabsEvent.tabCreated(tabItem: state.tabItem));
 
       widget.onTabCreated?.call(state.tabItem);
     }
@@ -110,19 +106,16 @@ class _CreateTabInputState extends State<CreateTabInput> {
     final runes = text.runes.toList();
     print('🔵 isEmoji: проверяем текст: "$text"');
     print('🔵 isEmoji: количество рун: ${runes.length}');
-    print(
-        '🔵 isEmoji: коды: ${runes.map((r) => '0x${r.toRadixString(16)}').join(", ")}');
+    print('🔵 isEmoji: коды: ${runes.map((r) => '0x${r.toRadixString(16)}').join(", ")}');
 
     // Проверяем диапазоны эмодзи
     for (final rune in runes) {
-      final isInRange =
-          (rune >= 0x1F300 && rune <= 0x1F9FF) || // Основные эмодзи
-              (rune >= 0x2600 && rune <= 0x26FF) || // Разные символы
-              (rune >= 0x2700 && rune <= 0x27BF) || // Dingbats
-              (rune >= 0xFE00 && rune <= 0xFE0F); // Вариации
+      final isInRange = (rune >= 0x1F300 && rune <= 0x1F9FF) || // Основные эмодзи
+          (rune >= 0x2600 && rune <= 0x26FF) || // Разные символы
+          (rune >= 0x2700 && rune <= 0x27BF) || // Dingbats
+          (rune >= 0xFE00 && rune <= 0xFE0F); // Вариации
 
-      print(
-          '🔵 isEmoji: руна 0x${rune.toRadixString(16)} ${isInRange ? 'в диапазоне' : 'не в диапазоне'}');
+      print('🔵 isEmoji: руна 0x${rune.toRadixString(16)} ${isInRange ? 'в диапазоне' : 'не в диапазоне'}');
 
       if (!isInRange) {
         print('🔵 isEmoji: не эмодзи');
@@ -147,20 +140,13 @@ class _CreateTabInputState extends State<CreateTabInput> {
     super.initState();
 
     final repository = context.dependencies.tabsRepository;
-    _bloc = CreateTabBloc(
-      repository: repository,
-      initialState: const CreateTabState.idle(),
-    );
+    _bloc = CreateTabBloc(repository: repository, initialState: const CreateTabState.idle());
 
     _controller.addListener(_textEditingControllerListener);
 
     _focusNode.addListener(_focusListener);
 
-    _listenable = Listenable.merge([
-      _focusNode,
-      _controller,
-      _keyboardListenerFocusNode,
-    ]);
+    _listenable = Listenable.merge([_focusNode, _controller, _keyboardListenerFocusNode]);
 
     _blocSubscription = _bloc.stream.listen(_blocListener);
   }
@@ -199,35 +185,23 @@ class _CreateTabInputState extends State<CreateTabInput> {
 
     if (title.isEmpty) return;
 
-    final newTab = TabItem(
-      id: const Uuid().v4(),
-      title: title,
-      emoji: _selectedEmoji,
-      createdAt: DateTime.now(),
-    );
+    final newTab = TabItem(id: const Uuid().v4(), title: title, emoji: _selectedEmoji, createdAt: DateTime.now());
 
     _controller.clear();
     setState(() => _selectedEmoji = null);
 
-    _bloc.add(
-      CreateTabEvent(
-        tabItem: newTab,
-      ),
-    );
+    _bloc.add(CreateTabEvent(tabItem: newTab));
 
     _focusNode.unfocus();
   }
 
   @override
-  Widget build(BuildContext context) =>
-      BlocBuilder<CreateTabBloc, CreateTabState>(
+  Widget build(BuildContext context) => BlocBuilder<CreateTabBloc, CreateTabState>(
         bloc: _bloc,
         builder: (context, state) => ListenableBuilder(
           listenable: _listenable,
           builder: (context, _) => SideMenuTileWrapper(
-            backgroundColor: _focusNode.hasFocus
-                ? AppColors.getSecondaryBackground(context)
-                : AppColors.getPrimaryBackground(context),
+            backgroundColor: _focusNode.hasFocus ? AppColors.getSecondaryBackground(context) : AppColors.getPrimaryBackground(context),
             child: KeyboardListener(
               focusNode: _keyboardListenerFocusNode,
               onKeyEvent: _handleKeyEvent,
@@ -237,43 +211,20 @@ class _CreateTabInputState extends State<CreateTabInput> {
                 focusNode: _focusNode,
                 onTapOutside: (_) => _focusNode.unfocus(),
                 decoration: InputDecoration(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 16,
-                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   prefixIconConstraints: const BoxConstraints(maxWidth: 52),
-                  prefixIcon: _selectedEmoji != null ||
-                          (!_focusNode.hasFocus && _controller.text.isEmpty)
+                  prefixIcon: _selectedEmoji != null || (!_focusNode.hasFocus && _controller.text.isEmpty)
                       ? Padding(
-                          padding: const EdgeInsets.only(
-                            right: 8,
-                            left: 20,
-                          ),
+                          padding: const EdgeInsets.only(right: 8, left: 20),
                           child: SizedBox(
                             height: 24,
                             width: 24,
                             child: Center(
                               child: _selectedEmoji != null
-                                  ? Text(
-                                      _selectedEmoji!,
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontFamily:
-                                            GoogleFonts.inter().fontFamily,
-                                      ),
-                                    )
+                                  ? Text(_selectedEmoji!, style: TextStyle(fontSize: 20, fontFamily: GoogleFonts.inter().fontFamily))
                                   : DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: const Center(
-                                        child: Icon(
-                                          Icons.add,
-                                          size: 18,
-                                          color: Colors.black,
-                                        ),
-                                      ),
+                                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
+                                      child: const Center(child: Icon(Icons.add, size: 18, color: Colors.black)),
                                     ),
                             ),
                           ),
@@ -281,25 +232,19 @@ class _CreateTabInputState extends State<CreateTabInput> {
                       : null,
                   suffixIcon: _controller.text.isNotEmpty
                       ? Padding(
-                          padding: const EdgeInsets.only(
-                            left: 8,
-                            right: 20,
-                          ),
+                          padding: const EdgeInsets.only(left: 8, right: 20),
                           child: SizedBox(
                             width: 24,
                             height: 24,
                             child: Center(
                               child: InkWell(
-                                onTap: state.isProcessing ? null : _createTab,
+                                onTap: state.isProcessing ? null : () => _createTab(),
                                 child: Builder(
                                   builder: (context) => SvgPicture.asset(
                                     'assets/icons/tab_check.svg',
                                     width: 24,
                                     height: 24,
-                                    colorFilter: ColorFilter.mode(
-                                      AppColors.getSecondaryText(context),
-                                      BlendMode.srcIn,
-                                    ),
+                                    colorFilter: ColorFilter.mode(AppColors.getSecondaryText(context), BlendMode.srcIn),
                                   ),
                                 ),
                               ),

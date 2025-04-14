@@ -26,26 +26,15 @@ class TabTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SideMenuTileWrapper(
-        backgroundColor: isSelected
-            ? AppColors.getSecondaryBackground(context)
-            : AppColors.getPrimaryBackground(context),
+        backgroundColor: isSelected ? AppColors.getSecondaryBackground(context) : AppColors.getPrimaryBackground(context),
         child: InkWell(
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: 16,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.start,
               children: [
-                Text(
-                  tabItem.emoji ?? '',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontFamily: GoogleFonts.inter().fontFamily,
-                  ),
-                ),
+                Text(tabItem.emoji ?? '', style: TextStyle(fontSize: 20, fontFamily: GoogleFonts.inter().fontFamily)),
                 const SizedBox(width: 12),
                 Expanded(
                   child: AnimatedDefaultTextStyle(
@@ -55,13 +44,10 @@ class TabTile extends StatelessWidget {
                       color: AppColors.getPrimaryText(context),
                       fontSize: 17,
                       letterSpacing: 0.2,
-                      fontWeight:
-                          isSelected ? FontWeight.w500 : FontWeight.normal,
+                      fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
                       fontFamily: GoogleFonts.inter().fontFamily,
                     ),
-                    child: Text(
-                      tabItem.title,
-                    ),
+                    child: Text(tabItem.title),
                   ),
                 ),
                 if (tabItem.isInbox) ...[
@@ -75,10 +61,7 @@ class TabTile extends StatelessWidget {
                       'assets/icons/tab_pin.svg',
                       width: 24,
                       height: 24,
-                      colorFilter: ColorFilter.mode(
-                        AppColors.getSecondaryText(context),
-                        BlendMode.srcIn,
-                      ),
+                      colorFilter: ColorFilter.mode(AppColors.getSecondaryText(context), BlendMode.srcIn),
                     ),
                   ),
                 ],

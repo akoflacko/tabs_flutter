@@ -21,32 +21,17 @@ abstract interface class ITabsRepository {
 class TabsRepository implements ITabsRepository {
   final ITabsDatasource _datasource;
 
-  const TabsRepository(
-    this._datasource,
-  );
+  const TabsRepository(this._datasource);
 
   @override
-  Future<TabItem> createTab(
-    TabItem tab,
-  ) =>
-      _datasource.createTab(
-        tab,
-      );
+  Future<TabItem> createTab(TabItem tab) => _datasource.createTab(tab);
 
   @override
-  Future<void> deleteTab(
-    TabItem tab,
-  ) =>
-      _datasource.deleteTab(
-        tab,
-      );
+  Future<void> deleteTab(TabItem tab) => _datasource.deleteTab(tab);
 
   @override
   Future<List<TabItem>> fetchTabs() => _datasource.fetchTabs();
 
   @override
-  Future<TabItem> updateTab(
-    TabItem tab,
-  ) =>
-      _datasource.updateTab(tab);
+  Future<TabItem> updateTab(TabItem tab) => _datasource.updateTab(tab);
 }

@@ -4,15 +4,16 @@ import '../theme/app_colors.dart';
 
 class MessageBubble extends StatelessWidget {
   final Message message;
-  final bool isSelectionMode;
+  final bool selectionModeEnabled;
   final bool isSelected;
+
   final VoidCallback onLongPress;
   final VoidCallback onSelect;
 
-  MessageBubble({
+  const MessageBubble({
     super.key,
     required this.message,
-    required this.isSelectionMode,
+    required this.selectionModeEnabled,
     required this.isSelected,
     required this.onLongPress,
     required this.onSelect,
@@ -20,80 +21,98 @@ class MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onLongPress: onLongPress,
-      onTap: isSelectionMode ? onSelect : null,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        child: AnimatedSize(
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeOutCubic,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (isSelectionMode)
-                AnimatedOpacity(
-                  duration: const Duration(milliseconds: 400),
-                  opacity: isSelectionMode ? 1 : 0,
-                  child: TweenAnimationBuilder<double>(
-                    duration: const Duration(milliseconds: 400),
-                    tween: Tween(begin: 0.5, end: 1.0),
-                    curve: Curves.easeOutCubic,
-                    builder: (context, value, child) {
-                      return Transform.scale(
-                        scale: value,
-                        child: Container(
-                          width: 24,
-                          height: 24,
-                          margin: const EdgeInsets.only(right: 12, top: 8),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: isSelected
-                                  ? AppColors.getAccentBackground(context)
-                                  : AppColors.getDividedColor(context),
-                              width: 2,
-                            ),
-                            color: isSelected
-                                ? AppColors.getAccentBackground(context)
-                                : Colors.transparent,
-                          ),
-                          child: isSelected
-                              ? const Icon(
-                                  Icons.check,
-                                  size: 16,
-                                  color: Colors.white,
-                                )
-                              : null,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.getSecondaryBackground(context),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: AppColors.getTertiaryBackground(context),
-                      width: 1,
-                    ),
-                  ),
-                  child: Text(
-                    message.text,
-                    style: TextStyle(
-                      color: AppColors.getPrimaryText(context),
-                      letterSpacing: 0.2,
-                      fontSize: 16,
-                    ),
-                  ),
+    final borderRadius = BorderRadius.circular(16);
+
+    return InkWell(
+      onLongPress: selectionModeEnabled ? null : onLongPress,
+      onTap: selectionModeEnabled ? onSelect : null,
+      borderRadius: borderRadius,
+      child: Row(
+        mainAxisSize: MainAxisSize.max,
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: SizeTransition(
+                sizeFactor: animation,
+                axis: Axis.horizontal,
+                axisAlignment: 0.0,
+                child: ScaleTransition(
+                  scale: animation,
+                  child: child,
                 ),
               ),
-            ],
+            ),
+            child: selectionModeEnabled
+                ? _Radio(
+                    isSelected: isSelected,
+                  )
+                : const SizedBox.shrink(),
           ),
+          if (selectionModeEnabled) const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.getSecondaryBackground(context),
+                borderRadius: borderRadius,
+                border: Border.all(
+                  color: AppColors.getTertiaryBackground(context),
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                message.text,
+                style: TextStyle(
+                  color: AppColors.getPrimaryText(context),
+                  letterSpacing: 0.2,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// {@template radio}
+/// _Radio widget.
+/// {@endtemplate}
+class _Radio extends StatelessWidget {
+  /// {@macro radio}
+  const _Radio({
+    required this.isSelected,
+    super.key, // ignore: unused_element_parameter
+  });
+
+  final bool isSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 24,
+      height: 24,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: isSelected ? AppColors.getAccentBackground(context) : AppColors.getDividedColor(context),
+            width: 2,
+          ),
+          color: isSelected ? AppColors.getAccentBackground(context) : Colors.transparent,
         ),
+        child: isSelected
+            ? const Icon(
+                Icons.check,
+                size: 16,
+                color: Colors.white,
+              )
+            : null,
       ),
     );
   }

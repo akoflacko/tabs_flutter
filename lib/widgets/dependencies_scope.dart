@@ -16,15 +16,10 @@ class DependenciesScope extends StatelessWidget {
 
   final Widget child;
 
-  static Dependencies of(BuildContext context) => context
-      .getInheritedWidgetOfExactType<_InheritedDependencies>()!
-      .dependencies;
+  static Dependencies of(BuildContext context) => context.getInheritedWidgetOfExactType<_InheritedDependencies>()!.dependencies;
 
   @override
-  Widget build(BuildContext context) => _InheritedDependencies(
-        dependencies: dependencies,
-        child: child,
-      );
+  Widget build(BuildContext context) => _InheritedDependencies(dependencies: dependencies, child: child);
 }
 
 /// {@template dependencies_scope}

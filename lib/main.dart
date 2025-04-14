@@ -22,18 +22,8 @@ class MessengerApp extends StatelessWidget {
         scaffoldBackgroundColor: Colors.white,
         textTheme: GoogleFonts.interTextTheme(
           ThemeData.light().textTheme.copyWith(
-                bodyLarge: const TextStyle(
-                  fontSize: 17,
-                  fontVariations: [
-                    FontVariation('wght', 400),
-                  ],
-                ),
-                bodyMedium: const TextStyle(
-                  fontSize: 14,
-                  fontVariations: [
-                    FontVariation('wght', 400),
-                  ],
-                ),
+                bodyLarge: const TextStyle(fontSize: 17, fontVariations: [FontVariation('wght', 400)]),
+                bodyMedium: const TextStyle(fontSize: 14, fontVariations: [FontVariation('wght', 400)]),
               ),
         ),
       ),
@@ -50,20 +40,11 @@ void main() async {
   final tabsRepository = TabsRepository(tabsDatasource);
   final messagesRepository = MessagesRepository(tabsDatasource);
 
-  final tabsBloc = TabsBloc(
-    repository: tabsRepository,
-    initialState: const TabsState.idle(
-      tabs: [],
-    ),
-  );
+  final tabsBloc = TabsBloc(repository: tabsRepository, initialState: const TabsState.idle(tabs: []));
 
   runApp(
     DependenciesScope(
-      dependencies: Dependencies(
-        tabsRepository: tabsRepository,
-        messagesRepository: messagesRepository,
-        tabsBloc: tabsBloc,
-      ),
+      dependencies: Dependencies(tabsRepository: tabsRepository, messagesRepository: messagesRepository, tabsBloc: tabsBloc),
       child: const MessengerApp(),
     ),
   );
